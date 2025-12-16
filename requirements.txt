@@ -1,5 +1,5 @@
-# Telegram Bot
-python-telegram-bot>=21.0
+# Telegram Bot (with job-queue for scheduled tasks)
+python-telegram-bot[job-queue]>=21.0
 
 # OpenAI (GPT + Whisper)
 openai>=1.0
@@ -25,10 +25,7 @@ python-dateutil>=2.8
 pandas>=2.0
 matplotlib>=3.8
 
-# Gmail API (for future email integration)
-google-auth>=2.0
-google-auth-oauthlib>=1.0
-google-api-python-client>=2.0
+# Note: Gmail IMAP uses built-in imaplib, no extra dependencies needed
 
 # OCR for receipts (optional)
 # pytesseract>=0.3

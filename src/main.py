@@ -52,9 +52,15 @@ def main() -> None:
     
     logger.info("🤖 Starting Expense Tracking Bot...")
     logger.info(f"📂 Data directory: {config.DATA_DIR}")
+    logger.info(f"📂 Database URL: {config.DATABASE_URL}")
     
-    # Ensure data directory exists
+    # Ensure data directory exists BEFORE anything else
     config.ensure_data_dir()
+    
+    # Verify the directory was created
+    if not config.DATA_DIR.exists():
+        logger.error(f"❌ Failed to create data directory: {config.DATA_DIR}")
+        sys.exit(1)
     
     # Create application
     application = create_application()

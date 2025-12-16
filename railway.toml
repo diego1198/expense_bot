@@ -4,3 +4,9 @@ builder = "nixpacks"
 [deploy]
 restartPolicyType = "always"
 restartPolicyMaxRetries = 3
+
+# Volume for persistent SQLite database
+# You need to create this volume in Railway dashboard:
+# 1. Go to your service in Railway
+# 2. Click "Settings" -> "Volumes"
+# 3. Add volume with mount path: /data

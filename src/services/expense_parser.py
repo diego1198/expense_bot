@@ -83,17 +83,30 @@ class ExpenseParser:
         text_lower = text.lower().strip()
         
         # Common patterns:
-        # "100 en uber" / "gasté 100 en uber" / "$100 uber"
+        # "gasté 100 en uber" / "100 en uber" / "$100 uber"
         patterns = [
-            r"(?:gasté|pagué|compré|gaste|pague|compre)?\s*\$?\s*(\d+(?:[.,]\d{1,2})?)\s*(?:pesos|mxn|usd|en|de)?\s*(?:en|de)?\s*(.+)",
-            r"\$?\s*(\d+(?:[.,]\d{1,2})?)\s*(?:pesos|mxn|usd)?\s+(?:en|de)\s+(.+)",
+            # "gasté/pagué/compré 100 en descripción"
+            r"(?:gast[eé]|pagu[eé]|compr[eé])\s+\$?\s*(\d+(?:[.,]\d{1,2})?)\s*(?:pesos|mxn|usd)?\s+(?:en|de)\s+(.+)",
+            # "100 en descripción"
+            r"^\$?\s*(\d+(?:[.,]\d{1,2})?)\s*(?:pesos|mxn|usd)?\s+(?:en|de)\s+(.+)",
+            # "$100 descripción" (sin "en")
+            r"^\$\s*(\d+(?:[.,]\d{1,2})?)\s+(.+)",
+            # "100 descripción" o "100.50 descripción" (número + texto)
+            r"^(\d+(?:[.,]\d{1,2})?)\s+([a-záéíóúñü].+)$",
+            # "descripción 100" o "descripción 100.50" (texto + número al final)
+            r"^([a-záéíóúñü][a-záéíóúñü\s]+?)\s+(\d+(?:[.,]\d{1,2})?)$",
         ]
         
         for pattern in patterns:
             match = re.match(pattern, text_lower, re.IGNORECASE)
             if match:
-                amount_str = match.group(1).replace(",", ".")
-                description = match.group(2).strip()
+                # Check if this is the last pattern (description first, then amount)
+                if pattern == r"^([a-záéíóúñü][a-záéíóúñü\s]+?)\s+(\d+(?:[.,]\d{1,2})?)$":
+                    description = match.group(1).strip()
+                    amount_str = match.group(2).replace(",", ".")
+                else:
+                    amount_str = match.group(1).replace(",", ".")
+                    description = match.group(2).strip()
                 
                 try:
                     amount = float(amount_str)

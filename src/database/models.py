@@ -41,6 +41,13 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     
+    # Email integration (IMAP)
+    email_address: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    email_app_password: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    email_auto_check: Mapped[bool] = mapped_column(Boolean, default=False)  # Auto-check enabled
+    email_check_interval: Mapped[int] = mapped_column(Integer, default=30)  # Minutes between checks
+    email_last_checked: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    
     # Relationships
     expenses: Mapped[list["Expense"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     

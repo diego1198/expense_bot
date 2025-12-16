@@ -4,11 +4,14 @@ Loads environment variables and provides centralized settings.
 """
 
 import os
+import logging
 from pathlib import Path
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 class Config:
@@ -16,7 +19,13 @@ class Config:
     
     # Base paths
     BASE_DIR = Path(__file__).resolve().parent.parent
-    DATA_DIR = BASE_DIR / "data"
+    
+    # Data directory - use RAILWAY_VOLUME_MOUNT_PATH if available (for persistent storage)
+    _volume_path = os.getenv("RAILWAY_VOLUME_MOUNT_PATH", "")
+    if _volume_path:
+        DATA_DIR = Path(_volume_path)
+    else:
+        DATA_DIR = BASE_DIR / "data"
     
     # Telegram
     TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -31,11 +40,9 @@ class Config:
     GPT_MODEL: str = "gpt-4o-mini"
     WHISPER_MODEL: str = "whisper-1"
     
-    # Database
-    DATABASE_URL: str = os.getenv(
-        "DATABASE_URL", 
-        f"sqlite+aiosqlite:///{DATA_DIR}/expenses.db"
-    )
+    # Database - always use DATA_DIR for the path (ignore DATABASE_URL env var for SQLite)
+    # This ensures the database is always in the correct persistent location
+    DATABASE_URL: str = f"sqlite+aiosqlite:///{DATA_DIR.absolute()}/expenses.db"
     
     # Locale settings
     DEFAULT_CURRENCY: str = os.getenv("DEFAULT_CURRENCY", "MXN")
@@ -57,7 +64,16 @@ class Config:
     @classmethod
     def ensure_data_dir(cls) -> None:
         """Create data directory if it doesn't exist."""
-        cls.DATA_DIR.mkdir(parents=True, exist_ok=True)
+        logger.info(f"📂 Ensuring data directory exists: {cls.DATA_DIR}")
+        logger.info(f"📂 DATA_DIR absolute path: {cls.DATA_DIR.absolute()}")
+        try:
+            cls.DATA_DIR.mkdir(parents=True, exist_ok=True)
+            logger.info(f"✅ Data directory ready: {cls.DATA_DIR}")
+            logger.info(f"✅ Directory exists: {cls.DATA_DIR.exists()}")
+            logger.info(f"✅ Is writable: {os.access(cls.DATA_DIR, os.W_OK)}")
+        except Exception as e:
+            logger.error(f"❌ Failed to create data directory: {e}")
+            raise
     
     @classmethod
     def validate(cls) -> list[str]:

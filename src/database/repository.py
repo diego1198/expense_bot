@@ -9,6 +9,7 @@ from typing import Optional, Sequence
 
 from sqlalchemy import select, func, and_, extract
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.database.models import User, Category, Expense, PendingConfirmation
 from src.config import config
@@ -59,6 +60,73 @@ class UserRepository:
             return user, False
         user = await self.create(telegram_id, username, first_name, last_name)
         return user, True
+
+    async def update_email_credentials(
+        self,
+        telegram_id: int,
+        email_address: str,
+        app_password: str
+    ) -> Optional[User]:
+        """Update user's email credentials for IMAP access."""
+        user = await self.get_by_telegram_id(telegram_id)
+        if user:
+            user.email_address = email_address
+            user.email_app_password = app_password
+            await self.session.flush()
+        return user
+    
+    async def clear_email_credentials(self, telegram_id: int) -> bool:
+        """Remove user's email credentials."""
+        user = await self.get_by_telegram_id(telegram_id)
+        if user:
+            user.email_address = None
+            user.email_app_password = None
+            user.email_auto_check = False
+            await self.session.flush()
+            return True
+        return False
+    
+    async def set_email_auto_check(self, telegram_id: int, enabled: bool) -> bool:
+        """Enable or disable automatic email checking."""
+        user = await self.get_by_telegram_id(telegram_id)
+        if user and user.email_address:
+            user.email_auto_check = enabled
+            await self.session.flush()
+            return True
+        return False
+    
+    async def set_email_check_interval(self, telegram_id: int, minutes: int) -> bool:
+        """Set the email check interval in minutes."""
+        user = await self.get_by_telegram_id(telegram_id)
+        if user:
+            user.email_check_interval = minutes
+            await self.session.flush()
+            return True
+        return False
+    
+    async def update_email_last_checked(self, user_id: int) -> None:
+        """Update the last checked timestamp for a user."""
+        result = await self.session.execute(
+            select(User).where(User.id == user_id)
+        )
+        user = result.scalar_one_or_none()
+        if user:
+            user.email_last_checked = datetime.utcnow()
+            await self.session.flush()
+    
+    async def get_users_with_auto_check(self) -> Sequence[User]:
+        """Get all users with automatic email checking enabled."""
+        result = await self.session.execute(
+            select(User).where(
+                and_(
+                    User.email_auto_check == True,
+                    User.email_address.isnot(None),
+                    User.email_app_password.isnot(None),
+                    User.is_active == True
+                )
+            )
+        )
+        return result.scalars().all()
 
 
 class CategoryRepository:
@@ -186,10 +254,11 @@ class ExpenseRepository:
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
         category_id: Optional[int] = None,
-        confirmed_only: bool = True
+        confirmed_only: bool = True,
+        limit: Optional[int] = None
     ) -> Sequence[Expense]:
         """Get expenses for a user with optional filters."""
-        query = select(Expense).where(Expense.user_id == user_id)
+        query = select(Expense).options(selectinload(Expense.category)).where(Expense.user_id == user_id)
         
         if confirmed_only:
             query = query.where(Expense.is_confirmed == True)
@@ -204,6 +273,9 @@ class ExpenseRepository:
             query = query.where(Expense.category_id == category_id)
         
         query = query.order_by(Expense.expense_date.desc())
+        
+        if limit:
+            query = query.limit(limit)
         
         result = await self.session.execute(query)
         return result.scalars().all()
