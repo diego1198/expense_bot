@@ -1,1 +1,1 @@
-worker: python -m src.main
+worker: python3.11 -m src.main
