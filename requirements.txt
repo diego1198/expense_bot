@@ -1,0 +1,35 @@
+# Telegram Bot
+python-telegram-bot>=21.0
+
+# OpenAI (GPT + Whisper)
+openai>=1.0
+
+# Database
+sqlalchemy>=2.0
+aiosqlite>=0.19.0
+
+# Environment variables
+python-dotenv>=1.0
+
+# Data validation
+pydantic>=2.0
+
+# Async HTTP
+aiohttp>=3.9
+httpx>=0.25
+
+# Date handling
+python-dateutil>=2.8
+
+# Statistics and charts
+pandas>=2.0
+matplotlib>=3.8
+
+# Gmail API (for future email integration)
+google-auth>=2.0
+google-auth-oauthlib>=1.0
+google-api-python-client>=2.0
+
+# OCR for receipts (optional)
+# pytesseract>=0.3
+# pillow>=10.0
