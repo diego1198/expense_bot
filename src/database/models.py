@@ -91,6 +91,9 @@ class Expense(Base):
     # Source of the expense record
     source: Mapped[str] = mapped_column(String(50), default="telegram_text")  # telegram_text, telegram_voice, email
     
+    # Payment method
+    payment_method: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # efectivo, tarjeta, transferencia
+    
     # Confirmation status
     is_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
     is_pending: Mapped[bool] = mapped_column(Boolean, default=True)

@@ -240,6 +240,16 @@ class ExpenseRepository:
             await self.session.flush()
         return expense
     
+    async def confirm_with_payment(self, expense_id: int, payment_method: str) -> Optional[Expense]:
+        """Confirm an expense and set payment method."""
+        expense = await self.get_by_id(expense_id)
+        if expense:
+            expense.is_confirmed = True
+            expense.is_pending = False
+            expense.payment_method = payment_method
+            await self.session.flush()
+        return expense
+    
     async def delete(self, expense_id: int) -> bool:
         """Delete an expense."""
         expense = await self.get_by_id(expense_id)

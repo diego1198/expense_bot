@@ -604,16 +604,20 @@ O envíame un <b>audio</b> contándome 🎤
 🏪 Comercio: {parsed.merchant or "No especificado"}
 📅 Fecha: {date_str}
 
-¿Es correcto?"""
+💳 <b>¿Cómo pagaste?</b>"""
         
-        # Inline keyboard for confirmation
+        # Inline keyboard for payment method selection
         keyboard = [
             [
-                InlineKeyboardButton("✅ Confirmar", callback_data=f"confirm_{expense.id}"),
-                InlineKeyboardButton("❌ Cancelar", callback_data=f"cancel_{expense.id}")
+                InlineKeyboardButton("💵 Efectivo", callback_data=f"pay_efectivo_{expense.id}"),
+                InlineKeyboardButton("💳 Tarjeta", callback_data=f"pay_tarjeta_{expense.id}"),
             ],
             [
-                InlineKeyboardButton("✏️ Editar categoría", callback_data=f"edit_cat_{expense.id}")
+                InlineKeyboardButton("🏦 Transferencia", callback_data=f"pay_transferencia_{expense.id}"),
+            ],
+            [
+                InlineKeyboardButton("✏️ Editar categoría", callback_data=f"edit_cat_{expense.id}"),
+                InlineKeyboardButton("❌ Cancelar", callback_data=f"cancel_{expense.id}")
             ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -733,15 +737,19 @@ Solo escríbeme o dime lo que gastaste:
 🏪 Comercio: {parsed.merchant or "No especificado"}
 📅 Fecha: {date_str}
 
-¿Es correcto?"""
+💳 <b>¿Cómo pagaste?</b>"""
             
             keyboard = [
                 [
-                    InlineKeyboardButton("✅ Confirmar", callback_data=f"confirm_{expense.id}"),
-                    InlineKeyboardButton("❌ Cancelar", callback_data=f"cancel_{expense.id}")
+                    InlineKeyboardButton("💵 Efectivo", callback_data=f"pay_efectivo_{expense.id}"),
+                    InlineKeyboardButton("💳 Tarjeta", callback_data=f"pay_tarjeta_{expense.id}"),
                 ],
                 [
-                    InlineKeyboardButton("✏️ Editar categoría", callback_data=f"edit_cat_{expense.id}")
+                    InlineKeyboardButton("🏦 Transferencia", callback_data=f"pay_transferencia_{expense.id}"),
+                ],
+                [
+                    InlineKeyboardButton("✏️ Editar categoría", callback_data=f"edit_cat_{expense.id}"),
+                    InlineKeyboardButton("❌ Cancelar", callback_data=f"cancel_{expense.id}")
                 ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -819,6 +827,48 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             parse_mode="HTML",
             reply_markup=get_main_menu_keyboard()
         )
+    
+    # Payment method selection (confirms and saves payment method)
+    elif data.startswith("pay_"):
+        parts = data.split("_")
+        payment_method = parts[1]  # efectivo, tarjeta, transferencia
+        expense_id = int(parts[2])
+        
+        payment_icons = {
+            "efectivo": "💵",
+            "tarjeta": "💳",
+            "transferencia": "🏦"
+        }
+        payment_display = {
+            "efectivo": "Efectivo",
+            "tarjeta": "Tarjeta",
+            "transferencia": "Transferencia"
+        }
+        
+        async with get_session() as session:
+            expense_repo = ExpenseRepository(session)
+            pending_repo = PendingConfirmationRepository(session)
+            
+            expense = await expense_repo.confirm_with_payment(expense_id, payment_method)
+            await pending_repo.delete_by_expense_id(expense_id)
+        
+        if expense:
+            icon = payment_icons.get(payment_method, "💰")
+            method_name = payment_display.get(payment_method, payment_method)
+            await query.edit_message_text(
+                f"✅ <b>Gasto registrado</b>\n\n"
+                f"💵 ${expense.amount:,.2f} - {expense.description}\n"
+                f"{icon} Pagado con: <b>{method_name}</b>",
+                parse_mode="HTML"
+            )
+            # Show menu after confirmation
+            await query.message.reply_text(
+                "📋 <b>¿Qué más quieres hacer?</b>",
+                parse_mode="HTML",
+                reply_markup=get_main_menu_keyboard()
+            )
+        else:
+            await query.edit_message_text("❌ No se encontró el gasto.")
     
     # Edit category
     elif data.startswith("edit_cat_"):
@@ -920,7 +970,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             reply_markup=get_main_menu_keyboard()
         )
     
-    # Email invoice confirmation
+    # Email invoice confirmation (legacy - keep for backwards compatibility)
     elif data.startswith("email_confirm_"):
         expense_id = int(data.split("_")[2])
         
@@ -932,6 +982,44 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await query.edit_message_text(
                 f"✅ <b>Gasto de email registrado</b>\n\n"
                 f"💵 ${expense.amount:,.2f} - {expense.description}",
+                parse_mode="HTML"
+            )
+            await query.message.reply_text(
+                "📋 <b>¿Qué más quieres hacer?</b>",
+                parse_mode="HTML",
+                reply_markup=get_main_menu_keyboard()
+            )
+        else:
+            await query.edit_message_text("❌ No se encontró el gasto.")
+    
+    # Email payment method selection
+    elif data.startswith("emailpay_"):
+        parts = data.split("_")
+        payment_method = parts[1]  # efectivo, tarjeta, transferencia
+        expense_id = int(parts[2])
+        
+        payment_icons = {
+            "efectivo": "💵",
+            "tarjeta": "💳",
+            "transferencia": "🏦"
+        }
+        payment_display = {
+            "efectivo": "Efectivo",
+            "tarjeta": "Tarjeta",
+            "transferencia": "Transferencia"
+        }
+        
+        async with get_session() as session:
+            expense_repo = ExpenseRepository(session)
+            expense = await expense_repo.confirm_with_payment(expense_id, payment_method)
+        
+        if expense:
+            icon = payment_icons.get(payment_method, "💰")
+            method_name = payment_display.get(payment_method, payment_method)
+            await query.edit_message_text(
+                f"✅ <b>Gasto de email registrado</b>\n\n"
+                f"💵 ${expense.amount:,.2f} - {expense.description}\n"
+                f"{icon} Pagado con: <b>{method_name}</b>",
                 parse_mode="HTML"
             )
             await query.message.reply_text(
@@ -1049,13 +1137,15 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         if not expenses:
             text = "📋 No tienes gastos registrados."
         else:
+            payment_icons = {"efectivo": "💵", "tarjeta": "💳", "transferencia": "🏦"}
             text = "📋 <b>Tus últimos gastos:</b>\n\n"
             for i, exp in enumerate(expenses, 1):
                 date_str = exp.expense_date.strftime("%d/%m")
                 cat_emoji = "💰"
                 if exp.category:
                     cat_emoji = exp.category.emoji
-                text += f"{i}. {cat_emoji} ${exp.amount:,.2f} - {exp.description[:25]} ({date_str})\n"
+                pay_icon = payment_icons.get(exp.payment_method, "") if exp.payment_method else ""
+                text += f"{i}. {cat_emoji} ${exp.amount:,.2f} - {exp.description[:20]} {pay_icon} ({date_str})\n"
             
             text += "\n💡 Para eliminar, usa /quitar [número]"
         
@@ -1386,11 +1476,17 @@ async def check_emails_command(update: Update, context: ContextTypes.DEFAULT_TYP
 📅 Fecha: {date_str}
 📨 Asunto: {parsed.original_subject[:50]}...
 
-¿Registrar este gasto?"""
+💳 <b>¿Cómo pagaste?</b>"""
                 
                 keyboard = [
                     [
-                        InlineKeyboardButton("✅ Confirmar", callback_data=f"email_confirm_{expense.id}"),
+                        InlineKeyboardButton("💵 Efectivo", callback_data=f"emailpay_efectivo_{expense.id}"),
+                        InlineKeyboardButton("💳 Tarjeta", callback_data=f"emailpay_tarjeta_{expense.id}"),
+                    ],
+                    [
+                        InlineKeyboardButton("🏦 Transferencia", callback_data=f"emailpay_transferencia_{expense.id}"),
+                    ],
+                    [
                         InlineKeyboardButton("❌ Descartar", callback_data=f"email_cancel_{expense.id}")
                     ]
                 ]
@@ -1656,11 +1752,17 @@ async def auto_check_emails_job(context: ContextTypes.DEFAULT_TYPE) -> None:
 📋 Descripción: {parsed.description}
 📅 Fecha: {date_str}
 
-¿Registrar este gasto?"""
+💳 <b>¿Cómo pagaste?</b>"""
                         
                         keyboard = [
                             [
-                                InlineKeyboardButton("✅ Confirmar", callback_data=f"email_confirm_{expense.id}"),
+                                InlineKeyboardButton("💵 Efectivo", callback_data=f"emailpay_efectivo_{expense.id}"),
+                                InlineKeyboardButton("💳 Tarjeta", callback_data=f"emailpay_tarjeta_{expense.id}"),
+                            ],
+                            [
+                                InlineKeyboardButton("🏦 Transferencia", callback_data=f"emailpay_transferencia_{expense.id}"),
+                            ],
+                            [
                                 InlineKeyboardButton("❌ Descartar", callback_data=f"email_cancel_{expense.id}")
                             ]
                         ]
