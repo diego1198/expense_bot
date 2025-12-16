@@ -6,6 +6,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -56,6 +57,30 @@ async def init_db() -> None:
     eng = _ensure_engine()
     async with eng.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        
+        # Run migrations for existing databases
+        await _run_migrations(conn)
+
+
+async def _run_migrations(conn) -> None:
+    """Run database migrations for new columns."""
+    import sqlite3
+    
+    # Check if payment_method column exists in expenses table
+    try:
+        result = await conn.execute(
+            text("SELECT payment_method FROM expenses LIMIT 1")
+        )
+    except Exception:
+        # Column doesn't exist, add it
+        logger.info("Adding payment_method column to expenses table...")
+        try:
+            await conn.execute(
+                text("ALTER TABLE expenses ADD COLUMN payment_method VARCHAR(20)")
+            )
+            logger.info("payment_method column added successfully.")
+        except Exception as e:
+            logger.warning(f"Could not add payment_method column: {e}")
 
 
 async def close_db() -> None:
