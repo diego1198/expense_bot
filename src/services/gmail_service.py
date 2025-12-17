@@ -11,6 +11,16 @@ from typing import Optional, List
 from dataclasses import dataclass
 import re
 
+import pytz
+
+from src.config import config
+
+
+def get_local_now() -> datetime:
+    """Get current datetime in user's configured timezone."""
+    tz = pytz.timezone(config.TIMEZONE)
+    return datetime.now(tz).replace(tzinfo=None)  # Remove tzinfo for SQLite compatibility
+
 
 @dataclass
 class EmailMessage:
@@ -178,9 +188,9 @@ class GmailIMAPService:
                     
                     # Parse date
                     try:
-                        date = datetime.now()  # Simplified
+                        date = get_local_now()  # Use local timezone
                     except:
-                        date = datetime.now()
+                        date = get_local_now()
                     
                     body = self._get_email_body(msg)
                     

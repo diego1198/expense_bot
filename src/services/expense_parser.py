@@ -9,9 +9,16 @@ from datetime import datetime, timedelta
 from typing import Optional
 from dataclasses import dataclass
 
+import pytz
 from openai import AsyncOpenAI
 
 from src.config import config
+
+
+def get_local_now() -> datetime:
+    """Get current datetime in user's configured timezone."""
+    tz = pytz.timezone(config.TIMEZONE)
+    return datetime.now(tz).replace(tzinfo=None)  # Remove tzinfo for SQLite compatibility
 
 
 @dataclass
@@ -125,7 +132,7 @@ class ExpenseParser:
                     description=description.capitalize(),
                     category=category,
                     merchant=merchant,
-                    date=datetime.now(),
+                    date=get_local_now(),
                     confidence=0.7 if category != "Otros" else 0.5
                 )
         
@@ -162,7 +169,7 @@ class ExpenseParser:
     async def _gpt_parse(self, text: str, user_timezone: str) -> ParsedExpense:
         """Use GPT-4o-mini to parse complex expense descriptions."""
         
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = get_local_now().strftime("%Y-%m-%d")
         categories_list = ", ".join(self.category_names)
         
         system_prompt = f"""Eres un asistente que extrae información de gastos de texto en español.
@@ -206,7 +213,7 @@ Si el texto no parece ser un gasto, responde con needs_clarification: true."""
                 try:
                     expense_date = datetime.fromisoformat(result["date"])
                 except ValueError:
-                    expense_date = datetime.now()
+                    expense_date = get_local_now()
             
             return ParsedExpense(
                 amount=float(result.get("amount", 0)),
@@ -214,7 +221,7 @@ Si el texto no parece ser un gasto, responde con needs_clarification: true."""
                 description=result.get("description", text[:100]),
                 category=result.get("category", "Otros"),
                 merchant=result.get("merchant"),
-                date=expense_date or datetime.now(),
+                date=expense_date or get_local_now(),
                 confidence=float(result.get("confidence", 0.5)),
                 needs_clarification=result.get("needs_clarification", False),
                 clarification_question=result.get("clarification_question")
@@ -227,7 +234,7 @@ Si el texto no parece ser un gasto, responde con needs_clarification: true."""
                 currency=config.DEFAULT_CURRENCY,
                 description=text[:100],
                 category="Otros",
-                date=datetime.now(),
+                date=get_local_now(),
                 confidence=0.0,
                 needs_clarification=True,
                 clarification_question=f"No pude procesar tu mensaje. ¿Podrías indicar el monto y descripción del gasto? (Error: {str(e)[:50]})"

@@ -1280,9 +1280,8 @@ Escribe este comando con tus datos:
         
         await query.edit_message_text("📧 Buscando facturas en tu correo...")
         
-        # Trigger the check emails command
-        context.user_data['trigger_email_check'] = True
-        await check_emails_command(update, context)
+        # Call check emails with chat_id instead of using update.message
+        await _check_emails_for_user(context, query.message.chat_id, user.id)
     
     # Email: toggle auto
     elif data == "email_auto":
@@ -1377,25 +1376,20 @@ O envíame un audio 🎤
         await query.edit_message_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
 
 
-async def check_emails_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /buscar_facturas command - check for invoice emails via IMAP."""
-    if not is_user_allowed(update.effective_user.id):
-        return
-    
-    user = update.effective_user
+async def _check_emails_for_user(context: ContextTypes.DEFAULT_TYPE, chat_id: int, telegram_id: int) -> None:
+    """Check emails for a user and send results to chat. Used by both command and button."""
     
     # Get user's email credentials
     async with get_session() as session:
         user_repo = UserRepository(session)
-        db_user = await user_repo.get_by_telegram_id(user.id)
+        db_user = await user_repo.get_by_telegram_id(telegram_id)
         
         if not db_user or not db_user.email_address or not db_user.email_app_password:
-            await update.message.reply_text(
-                "📧 <b>Aún no conectaste tu email</b>\n\n"
-                "Para buscar facturas, primero conecta tu Gmail:\n"
-                "<code>/conectar_email tu@gmail.com tu_clave</code>\n\n"
-                "💡 Necesitas una contraseña de aplicación de Google.\n"
-                "Ver cómo: https://support.google.com/accounts/answer/185833",
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="📧 <b>Aún no conectaste tu email</b>\n\n"
+                     "Para buscar facturas, primero conecta tu Gmail:\n"
+                     "<code>/conectar_email tu@gmail.com tu_clave</code>",
                 parse_mode="HTML"
             )
             return
@@ -1403,19 +1397,15 @@ async def check_emails_command(update: Update, context: ContextTypes.DEFAULT_TYP
         email_address = db_user.email_address
         app_password = db_user.email_app_password
     
-    await update.message.reply_text("📧 Conectando a tu correo...")
-    
     try:
         # Create IMAP service for this user
         imap_service = GmailIMAPService(email_address, app_password)
         
         if not imap_service.connect():
-            await update.message.reply_text(
-                "❌ <b>Error de conexión</b>\n\n"
-                "No se pudo conectar a Gmail. Verifica:\n"
-                "• El email es correcto\n"
-                "• La contraseña de aplicación es válida\n"
-                "• IMAP está habilitado en tu cuenta de Gmail",
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="❌ <b>Error de conexión</b>\n\n"
+                     "No se pudo conectar a Gmail. Verifica que tus credenciales sean correctas.",
                 parse_mode="HTML"
             )
             return
@@ -1424,11 +1414,18 @@ async def check_emails_command(update: Update, context: ContextTypes.DEFAULT_TYP
         invoices = imap_service.get_unread_invoices()
         
         if not invoices:
-            await update.message.reply_text("📭 No se encontraron facturas nuevas.")
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="📭 No se encontraron facturas nuevas.",
+                reply_markup=get_main_menu_keyboard()
+            )
             imap_service.disconnect()
             return
         
-        await update.message.reply_text(f"📬 Encontré {len(invoices)} posibles facturas. Procesando...")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"📬 Encontré {len(invoices)} posibles facturas. Procesando..."
+        )
         
         # Process each invoice
         async with get_session() as session:
@@ -1436,7 +1433,7 @@ async def check_emails_command(update: Update, context: ContextTypes.DEFAULT_TYP
             category_repo = CategoryRepository(session)
             expense_repo = ExpenseRepository(session)
             
-            db_user = await user_repo.get_by_telegram_id(user.id)
+            db_user = await user_repo.get_by_telegram_id(telegram_id)
             
             processed = 0
             for email_msg in invoices:
@@ -1492,8 +1489,9 @@ async def check_emails_command(update: Update, context: ContextTypes.DEFAULT_TYP
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 
-                await update.message.reply_text(
-                    confirmation_text,
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=confirmation_text,
                     parse_mode="HTML",
                     reply_markup=reply_markup
                 )
@@ -1505,13 +1503,28 @@ async def check_emails_command(update: Update, context: ContextTypes.DEFAULT_TYP
         imap_service.disconnect()
         
         if processed == 0:
-            await update.message.reply_text("📭 No se encontraron facturas válidas para procesar.")
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="📭 No se encontraron facturas válidas para procesar.",
+                reply_markup=get_main_menu_keyboard()
+            )
     
     except Exception as e:
         logger.error(f"Error checking emails: {e}")
-        await update.message.reply_text(
-            f"❌ Error al revisar correos: {str(e)[:100]}"
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"❌ Error al revisar correos: {str(e)[:100]}"
         )
+
+
+async def check_emails_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /buscar_facturas command - check for invoice emails via IMAP."""
+    if not is_user_allowed(update.effective_user.id):
+        return
+    
+    user = update.effective_user
+    await update.message.reply_text("📧 Conectando a tu correo...")
+    await _check_emails_for_user(context, update.effective_chat.id, user.id)
 
 
 async def setup_email_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
