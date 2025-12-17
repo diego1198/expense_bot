@@ -3,10 +3,12 @@ Email invoice parser using GPT to extract expense data from emails.
 """
 
 import json
+import io
 from typing import Optional
 from dataclasses import dataclass
 from datetime import datetime
 
+import pdfplumber
 from openai import AsyncOpenAI
 
 from src.config import config
@@ -25,6 +27,21 @@ class ParsedInvoice:
     confidence: float
     email_id: str
     original_subject: str
+
+
+def extract_text_from_pdf(pdf_data: bytes) -> str:
+    """Extract text content from a PDF file."""
+    try:
+        with pdfplumber.open(io.BytesIO(pdf_data)) as pdf:
+            text_parts = []
+            for page in pdf.pages[:5]:  # Limit to first 5 pages
+                page_text = page.extract_text()
+                if page_text:
+                    text_parts.append(page_text)
+            return "\n".join(text_parts)[:4000]  # Limit total size
+    except Exception as e:
+        print(f"Error extracting PDF text: {e}")
+        return ""
 
 
 class EmailInvoiceParser:
@@ -53,16 +70,16 @@ class EmailInvoiceParser:
         categories_list = ", ".join(self.category_names)
         
         system_prompt = f"""Eres un asistente que extrae información de gastos de correos electrónicos de facturas y recibos.
-Analiza el correo y extrae la información del gasto.
+Analiza el correo y el contenido del PDF adjunto (si existe) para extraer la información del gasto.
 
 Categorías disponibles: {categories_list}
 
 Responde SOLO con JSON válido:
 {{
-    "amount": número (monto total del gasto/factura),
-    "currency": "USD" o "MXN" (detecta la moneda del correo),
-    "merchant": "nombre del comercio o empresa",
-    "description": "descripción breve del gasto",
+    "amount": número (monto total del gasto/factura - busca "TOTAL" o "VALOR TOTAL"),
+    "currency": "USD" o "MXN" (detecta la moneda, en Ecuador es USD),
+    "merchant": "nombre del comercio o empresa emisora",
+    "description": "descripción breve del gasto o productos/servicios",
     "category": "una de las categorías disponibles",
     "date": "YYYY-MM-DD" (fecha de la factura/recibo),
     "confidence": número entre 0 y 1,
@@ -72,12 +89,23 @@ Responde SOLO con JSON válido:
 Si el correo NO es una factura o recibo de compra, responde con is_invoice: false.
 Si no puedes extraer el monto, usa 0."""
 
+        # Extract PDF content if available
+        pdf_content = ""
+        if email.attachments:
+            for attachment in email.attachments:
+                if attachment.filename.lower().endswith('.pdf'):
+                    pdf_text = extract_text_from_pdf(attachment.data)
+                    if pdf_text:
+                        pdf_content = f"\n\n--- CONTENIDO DEL PDF ({attachment.filename}) ---\n{pdf_text}"
+                        break  # Use first PDF found
+
         user_content = f"""
 Asunto: {email.subject}
 De: {email.sender}
 
-Contenido:
-{email.body[:3000]}
+Contenido del correo:
+{email.body[:2000]}
+{pdf_content}
 """
 
         try:

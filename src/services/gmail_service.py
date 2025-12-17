@@ -23,6 +23,14 @@ def get_local_now() -> datetime:
 
 
 @dataclass
+class EmailAttachment:
+    """Email attachment data."""
+    filename: str
+    content_type: str
+    data: bytes
+
+
+@dataclass
 class EmailMessage:
     """Email message data."""
     email_id: str
@@ -30,6 +38,11 @@ class EmailMessage:
     sender: str
     date: datetime
     body: str
+    attachments: List['EmailAttachment'] = None
+    
+    def __post_init__(self):
+        if self.attachments is None:
+            self.attachments = []
 
 
 class GmailIMAPService:
@@ -137,6 +150,36 @@ class GmailIMAPService:
         
         return body[:3000]  # Limit size
     
+    def _get_attachments(self, msg) -> List[EmailAttachment]:
+        """Extract PDF attachments from email."""
+        attachments = []
+        
+        if not msg.is_multipart():
+            return attachments
+        
+        for part in msg.walk():
+            content_disposition = str(part.get("Content-Disposition", ""))
+            
+            if "attachment" in content_disposition:
+                filename = part.get_filename()
+                if filename:
+                    # Decode filename if needed
+                    filename = self._decode_header_value(filename)
+                    
+                    # Only get PDF files
+                    if filename.lower().endswith('.pdf'):
+                        content_type = part.get_content_type()
+                        data = part.get_payload(decode=True)
+                        
+                        if data:
+                            attachments.append(EmailAttachment(
+                                filename=filename,
+                                content_type=content_type,
+                                data=data
+                            ))
+        
+        return attachments
+    
     def _is_invoice_email(self, subject: str, sender: str, body: str = "") -> bool:
         """Check if email is likely an invoice/receipt."""
         text = f"{subject} {sender} {body}".lower()
@@ -197,13 +240,15 @@ class GmailIMAPService:
                         date = get_local_now()
                     
                     body = self._get_email_body(msg)
+                    attachments = self._get_attachments(msg)
                     
                     emails.append(EmailMessage(
                         email_id=email_id.decode() if isinstance(email_id, bytes) else str(email_id),
                         subject=subject,
                         sender=sender,
                         date=date,
-                        body=body
+                        body=body,
+                        attachments=attachments
                     ))
                 
                 except Exception as e:
