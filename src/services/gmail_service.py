@@ -43,7 +43,11 @@ class GmailIMAPService:
         "factura", "invoice", "recibo", "receipt", "payment",
         "orden", "order", "compra", "purchase", "confirmación",
         "confirmation", "cargo", "charge", "pago", "paid",
-        "suscripción", "subscription", "renovación", "renewal"
+        "suscripción", "subscription", "renovación", "renewal",
+        # Ecuador electronic invoices
+        "documento electrónico", "documento electronico", 
+        "comprobante", "tributario", "sri", "nota de venta",
+        "nota de crédito", "nota de credito", "retención", "retencion"
     ]
     
     def __init__(self, email_address: str, app_password: str):
@@ -133,9 +137,9 @@ class GmailIMAPService:
         
         return body[:3000]  # Limit size
     
-    def _is_invoice_email(self, subject: str, sender: str) -> bool:
+    def _is_invoice_email(self, subject: str, sender: str, body: str = "") -> bool:
         """Check if email is likely an invoice/receipt."""
-        text = f"{subject} {sender}".lower()
+        text = f"{subject} {sender} {body}".lower()
         
         for keyword in self.INVOICE_KEYWORDS:
             if keyword in text:
@@ -217,7 +221,7 @@ class GmailIMAPService:
         
         invoices = [
             email for email in all_emails
-            if self._is_invoice_email(email.subject, email.sender)
+            if self._is_invoice_email(email.subject, email.sender, email.body)
         ]
         
         return invoices
