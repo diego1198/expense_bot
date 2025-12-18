@@ -96,7 +96,7 @@ IMPORTANTE:
 - En notificaciones de tarjeta, el comercio está en "Establecimiento"
 - En Deuna, el comercio está en "Nombre del beneficiario"  
 - El monto puede tener formato "76,04" (coma) o "76.04" (punto)
-- Si no puedes extraer el monto, usa 0
+- Si no puedes extraer el monto, usa 0"""
 
         # Extract PDF content if available
         pdf_content = ""
