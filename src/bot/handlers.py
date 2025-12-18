@@ -55,7 +55,8 @@ def get_main_menu_keyboard():
             InlineKeyboardButton("🧹 Borrar todo", callback_data="menu_borrar_todo"),
         ],
         [
-            InlineKeyboardButton("📧 Configurar email", callback_data="menu_email"),
+            InlineKeyboardButton("� Buscar facturas", callback_data="email_buscar"),
+            InlineKeyboardButton("⚙️ Config. email", callback_data="menu_email"),
         ],
         [
             InlineKeyboardButton("❓ Ayuda", callback_data="menu_ayuda"),
@@ -71,12 +72,11 @@ def get_email_menu_keyboard():
             InlineKeyboardButton("🔗 Conectar Gmail", callback_data="email_conectar"),
         ],
         [
-            InlineKeyboardButton("🔍 Buscar facturas", callback_data="email_buscar"),
             InlineKeyboardButton("🤖 Auto-búsqueda", callback_data="email_auto"),
+            InlineKeyboardButton("⏱️ Frecuencia", callback_data="email_frecuencia"),
         ],
         [
-            InlineKeyboardButton("⏱️ Cambiar frecuencia", callback_data="email_frecuencia"),
-            InlineKeyboardButton("❌ Desconectar", callback_data="email_desconectar"),
+            InlineKeyboardButton("❌ Desconectar email", callback_data="email_desconectar"),
         ],
         [
             InlineKeyboardButton("⬅️ Volver al menú", callback_data="menu_principal"),
@@ -1022,11 +1022,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 f"{icon} Pagado con: <b>{method_name}</b>",
                 parse_mode="HTML"
             )
-            await query.message.reply_text(
-                "📋 <b>¿Qué más quieres hacer?</b>",
-                parse_mode="HTML",
-                reply_markup=get_main_menu_keyboard()
-            )
         else:
             await query.edit_message_text("❌ No se encontró el gasto.")
     
@@ -1038,11 +1033,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await expense_repo.delete(expense_id)
         
         await query.edit_message_text("❌ Gasto de email descartado.")
-        await query.message.reply_text(
-            "📋 <b>¿Qué quieres hacer?</b>",
-            parse_mode="HTML",
-            reply_markup=get_main_menu_keyboard()
-        )
     
     # ========== MENU BUTTONS ==========
     
