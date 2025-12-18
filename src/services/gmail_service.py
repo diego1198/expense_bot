@@ -60,7 +60,13 @@ class GmailIMAPService:
         # Ecuador electronic invoices
         "documento electrónico", "documento electronico", 
         "comprobante", "tributario", "sri", "nota de venta",
-        "nota de crédito", "nota de credito", "retención", "retencion"
+        "nota de crédito", "nota de credito", "retención", "retencion",
+        # Credit card notifications
+        "realizaste una compra", "tarjeta terminada", "titanium", 
+        "visa", "mastercard", "diners", "blu", "establecimiento",
+        # Transfer/payment app notifications  
+        "pagaste", "deuna", "transferencia", "pago a comercio",
+        "beneficiario", "transacción exitosa", "transaccion exitosa"
     ]
     
     def __init__(self, email_address: str, app_password: str):

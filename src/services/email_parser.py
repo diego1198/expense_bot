@@ -69,25 +69,34 @@ class EmailInvoiceParser:
         """
         categories_list = ", ".join(self.category_names)
         
-        system_prompt = f"""Eres un asistente que extrae información de gastos de correos electrónicos de facturas y recibos.
+        system_prompt = f"""Eres un asistente que extrae información de gastos de correos electrónicos.
 Analiza el correo y el contenido del PDF adjunto (si existe) para extraer la información del gasto.
+
+Tipos de correos que puedes recibir:
+1. FACTURAS ELECTRÓNICAS (SRI Ecuador) - El monto está en el PDF adjunto
+2. NOTIFICACIONES DE TARJETA DE CRÉDITO (Diners, Visa, Mastercard, Blu) - Busca "Valor" o monto en el correo
+3. NOTIFICACIONES DE TRANSFERENCIA (Deuna, bancos) - Busca "Monto" o "Pagaste $X"
+4. RECIBOS DE COMPRA - Confirmaciones de pedidos
 
 Categorías disponibles: {categories_list}
 
 Responde SOLO con JSON válido:
 {{
-    "amount": número (monto total del gasto/factura - busca "TOTAL" o "VALOR TOTAL"),
-    "currency": "USD" o "MXN" (detecta la moneda, en Ecuador es USD),
-    "merchant": "nombre del comercio o empresa emisora",
-    "description": "descripción breve del gasto o productos/servicios",
+    "amount": número (monto del gasto - busca "Valor", "Monto", "Total", "$X"),
+    "currency": "USD" (en Ecuador siempre es USD),
+    "merchant": "nombre del comercio/establecimiento/beneficiario",
+    "description": "descripción breve del gasto",
     "category": "una de las categorías disponibles",
-    "date": "YYYY-MM-DD" (fecha de la factura/recibo),
+    "date": "YYYY-MM-DD" (fecha del gasto),
     "confidence": número entre 0 y 1,
-    "is_invoice": boolean (true si es una factura/recibo, false si no lo es)
+    "is_invoice": boolean (true si es un gasto válido)
 }}
 
-Si el correo NO es una factura o recibo de compra, responde con is_invoice: false.
-Si no puedes extraer el monto, usa 0."""
+IMPORTANTE: 
+- En notificaciones de tarjeta, el comercio está en "Establecimiento"
+- En Deuna, el comercio está en "Nombre del beneficiario"  
+- El monto puede tener formato "76,04" (coma) o "76.04" (punto)
+- Si no puedes extraer el monto, usa 0
 
         # Extract PDF content if available
         pdf_content = ""
