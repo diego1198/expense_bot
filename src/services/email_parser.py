@@ -4,6 +4,7 @@ Email invoice parser using GPT to extract expense data from emails.
 
 import json
 import io
+import logging
 from typing import Optional
 from dataclasses import dataclass
 from datetime import datetime
@@ -13,6 +14,8 @@ from openai import AsyncOpenAI
 
 from src.config import config
 from src.services.gmail_service import EmailMessage
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -75,14 +78,14 @@ Analiza el correo y el contenido del PDF adjunto (si existe) para extraer la inf
 Tipos de correos que puedes recibir:
 1. FACTURAS ELECTRÓNICAS (SRI Ecuador) - El monto está en el PDF adjunto
 2. NOTIFICACIONES DE TARJETA DE CRÉDITO (Diners, Visa, Mastercard, Blu) - Busca "Valor" o monto en el correo
-3. NOTIFICACIONES DE TRANSFERENCIA (Deuna, bancos) - Busca "Monto" o "Pagaste $X"
+3. NOTIFICACIONES DE TRANSFERENCIA (Deuna, bancos) - Busca "Monto" o "Pagaste $X a"
 4. RECIBOS DE COMPRA - Confirmaciones de pedidos
 
 Categorías disponibles: {categories_list}
 
 Responde SOLO con JSON válido:
 {{
-    "amount": número (monto del gasto - busca "Valor", "Monto", "Total", "$X"),
+    "amount": número decimal (SIEMPRE usa punto como separador: 0.45, 10.01, 76.04),
     "currency": "USD" (en Ecuador siempre es USD),
     "merchant": "nombre del comercio/establecimiento/beneficiario",
     "description": "descripción breve del gasto",
@@ -93,9 +96,11 @@ Responde SOLO con JSON válido:
 }}
 
 IMPORTANTE: 
-- En notificaciones de tarjeta, el comercio está en "Establecimiento"
-- En Deuna, el comercio está en "Nombre del beneficiario"  
-- El monto puede tener formato "76,04" (coma) o "76.04" (punto)
+- SIEMPRE convierte el monto a número con punto decimal (ej: "$0,45" → 0.45, "76,04" → 76.04)
+- En Deuna, busca "Pagaste $X" en el título o "Monto" en los detalles
+- El beneficiario/comercio está en "Nombre del beneficiario"
+- Montos pequeños como $0.45 son válidos (ej: pasajes de metro)
+- En tarjetas, el comercio está en "Establecimiento" y monto en "Valor"
 - Si no puedes extraer el monto, usa 0"""
 
         # Extract PDF content if available
@@ -130,14 +135,17 @@ Contenido del correo:
             )
             
             result = json.loads(response.choices[0].message.content)
+            logger.info(f"GPT parsed email '{email.subject[:40]}': amount={result.get('amount')}, merchant={result.get('merchant')}")
             
             # Check if it's actually an invoice
             if not result.get("is_invoice", True):
+                logger.info(f"Email rejected as not invoice: {email.subject[:40]}")
                 return None
             
             # Check if we got a valid amount
             amount = float(result.get("amount", 0))
             if amount <= 0:
+                logger.warning(f"Email with invalid amount ({amount}): {email.subject[:40]}")
                 return None
             
             # Parse date
