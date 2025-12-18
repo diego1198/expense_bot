@@ -1436,11 +1436,19 @@ async def _check_emails_for_user(context: ContextTypes.DEFAULT_TYPE, chat_id: in
             db_user = await user_repo.get_by_telegram_id(telegram_id)
             
             processed = 0
+            failed = 0
             for email_msg in invoices:
                 # Parse invoice with GPT
-                parsed = await email_invoice_parser.parse_invoice_email(email_msg)
-                
-                if not parsed or parsed.amount <= 0:
+                try:
+                    parsed = await email_invoice_parser.parse_invoice_email(email_msg)
+                    
+                    if not parsed or parsed.amount <= 0:
+                        failed += 1
+                        logger.info(f"Email sin monto válido: {email_msg.subject[:50]}")
+                        continue
+                except Exception as e:
+                    failed += 1
+                    logger.error(f"Error parsing email {email_msg.subject[:30]}: {e}")
                     continue
                 
                 # Find category
@@ -1502,10 +1510,28 @@ async def _check_emails_for_user(context: ContextTypes.DEFAULT_TYPE, chat_id: in
         
         imap_service.disconnect()
         
+        # Show summary at the end
         if processed == 0:
+            summary = "📭 No se encontraron facturas válidas para procesar."
+            if failed > 0:
+                summary += f"\n\n⚠️ {failed} correos no pudieron procesarse (sin monto detectable)."
             await context.bot.send_message(
                 chat_id=chat_id,
-                text="📭 No se encontraron facturas válidas para procesar.",
+                text=summary,
+                reply_markup=get_main_menu_keyboard()
+            )
+        else:
+            # Show summary after all invoices processed
+            summary = f"✅ <b>Procesamiento completado</b>\n\n"
+            summary += f"📧 {processed} gasto(s) pendiente(s) de confirmar"
+            if failed > 0:
+                summary += f"\n⚠️ {failed} correo(s) sin monto detectable"
+            summary += "\n\n👆 Selecciona el método de pago en cada gasto para confirmarlo."
+            
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=summary,
+                parse_mode="HTML",
                 reply_markup=get_main_menu_keyboard()
             )
     
