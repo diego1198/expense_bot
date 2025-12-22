@@ -118,11 +118,8 @@ class ExpenseParser:
                     confidence=0.8,
                     needs_clarification=False
                 )
-        # ...existing code...
-        """
-        Try to parse expense with simple regex patterns.
-        Returns None if pattern is too complex for regex.
-        """
+        # Try to parse expense with simple regex patterns.
+        # Returns None if pattern is too complex for regex.
         text_lower = text.lower().strip()
         
         # Common patterns:
@@ -181,13 +178,6 @@ class ExpenseParser:
             for keyword in keywords:
                 if keyword.lower() in text.lower():
                     return cat_name
-            def _match_income_category(self, text: str) -> str:
-                for cat_full, keywords in config.INCOME_CATEGORIES.items():
-                    cat_name = cat_full.split(" ", 1)[1] if " " in cat_full else cat_full
-                    for keyword in keywords:
-                        if keyword.lower() in text.lower():
-                            return cat_name
-                return "Otros ingresos"
         """Match category based on keywords."""
         text_lower = text.lower()
         
@@ -214,6 +204,14 @@ class ExpenseParser:
                 return merchant.title()
         
         return None
+    
+    def _match_income_category(self, text: str) -> str:
+        for cat_full, keywords in config.INCOME_CATEGORIES.items():
+            cat_name = cat_full.split(" ", 1)[1] if " " in cat_full else cat_full
+            for keyword in keywords:
+                if keyword.lower() in text.lower():
+                    return cat_name
+        return "Otros ingresos"
     
     async def _gpt_parse(self, text: str, user_timezone: str) -> ParsedExpense:
         """Use GPT-4o-mini to parse complex expense descriptions."""
