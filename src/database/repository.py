@@ -204,7 +204,8 @@ class ExpenseRepository:
         source: str = "telegram_text",
         expense_date: Optional[datetime] = None,
         original_message: Optional[str] = None,
-        is_confirmed: bool = False
+        is_confirmed: bool = False,
+        is_income: bool = False
     ) -> Expense:
         """Create a new expense."""
         expense = Expense(
@@ -218,7 +219,8 @@ class ExpenseRepository:
             expense_date=expense_date or datetime.utcnow(),
             original_message=original_message,
             is_confirmed=is_confirmed,
-            is_pending=not is_confirmed
+            is_pending=not is_confirmed,
+            is_income=is_income
         )
         self.session.add(expense)
         await self.session.flush()
