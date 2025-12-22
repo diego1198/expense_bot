@@ -106,13 +106,16 @@ class Expense(Base):
     # Original message for reference
     original_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     
+    # Income/Expense flag
+    is_income: Mapped[bool] = mapped_column(Boolean, default=False)  # True = ingreso, False = gasto
+
     # Relationships
     user: Mapped["User"] = relationship(back_populates="expenses")
     category: Mapped[Optional["Category"]] = relationship(back_populates="expenses")
-    
+
     def __repr__(self) -> str:
-        return f"<Expense(id={self.id}, amount={self.amount}, description={self.description[:30]})>"
-    
+        return f"<Expense(id={self.id}, amount={self.amount}, description={self.description[:30]}, is_income={self.is_income})>"
+
     @property
     def formatted_amount(self) -> str:
         """Return formatted amount with currency."""

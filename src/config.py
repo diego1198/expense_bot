@@ -60,6 +60,14 @@ class Config:
         "💼 Trabajo": ["oficina", "equipo", "herramientas", "software", "dominio", "hosting"],
         "🎁 Otros": []
     }
+
+    # Income categories
+    INCOME_CATEGORIES: dict[str, list[str]] = {
+        "💵 Sueldo": ["sueldo", "salario", "pago mensual", "quincena", "remuneración"],
+        "💸 Préstamo": ["préstamo", "prestamo", "crédito", "deuda", "abono préstamo"],
+        "📈 Inversión": ["inversión", "retorno", "ganancia", "dividendo", "rendimiento", "interés"],
+        "💰 Otros ingresos": ["ingreso", "extra", "venta", "regalo", "bono", "premio"]
+    }
     
     @classmethod
     def ensure_data_dir(cls) -> None:

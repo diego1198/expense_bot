@@ -51,6 +51,9 @@ def get_main_menu_keyboard():
             InlineKeyboardButton("📂 Tipos de gasto", callback_data="menu_tipos"),
         ],
         [
+            InlineKeyboardButton("➕ Registrar ingreso", callback_data="menu_registrar_ingreso"),
+        ],
+        [
             InlineKeyboardButton("🗑️ Quitar un gasto", callback_data="menu_quitar"),
             InlineKeyboardButton("🧹 Borrar todo", callback_data="menu_borrar_todo"),
         ],
@@ -324,17 +327,30 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     months_es = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
                  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
-    
+
     stats_text = f"📊 <b>Estadísticas de {months_es[now.month]} {now.year}</b>\n\n"
-    
-    if not summary["categories"]:
-        stats_text += "<i>No hay gastos registrados este mes.</i>"
+
+    # Expenses
+    if not summary["expenses"]:
+        stats_text += "<i>No hay gastos registrados este mes.</i>\n"
     else:
-        for cat in sorted(summary["categories"], key=lambda x: x["total"], reverse=True):
+        stats_text += "<b>Gastos:</b>\n"
+        for cat in sorted(summary["expenses"], key=lambda x: x["total"], reverse=True):
             stats_text += f"{cat['emoji']} {cat['name']}: ${cat['total']:,.2f} ({cat['count']} gastos)\n"
-        
-        stats_text += f"\n💰 <b>Total: ${summary['total']:,.2f}</b>"
-    
+        stats_text += f"\n💸 <b>Total gastos: ${summary['total_expenses']:,.2f}</b>\n"
+
+    # Incomes
+    if summary["incomes"]:
+        stats_text += "\n<b>Ingresos:</b>\n"
+        for cat in sorted(summary["incomes"], key=lambda x: x["total"], reverse=True):
+            stats_text += f"{cat['emoji']} {cat['name']}: ${cat['total']:,.2f} ({cat['count']} ingresos)\n"
+        stats_text += f"\n💵 <b>Total ingresos: ${summary['total_incomes']:,.2f}</b>\n"
+
+    # Balance
+    if summary["total_incomes"] or summary["total_expenses"]:
+        balance = summary["total_incomes"] - summary["total_expenses"]
+        stats_text += f"\n<b>Balance:</b> <b>${balance:,.2f}</b>"
+
     await update.message.reply_text(stats_text, parse_mode="HTML")
     await update.message.reply_text(
         "📋 <b>¿Qué más quieres hacer?</b>",
@@ -364,21 +380,34 @@ async def stats_year_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     months_es = ["", "Ene", "Feb", "Mar", "Abr", "May", "Jun",
                  "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
-    
+
     stats_text = f"📈 <b>Estadísticas de {now.year}</b>\n\n"
-    
-    has_data = any(m["total"] > 0 for m in summary["months"])
-    
-    if not has_data:
-        stats_text += "<i>No hay gastos registrados este año.</i>"
+
+    # Expenses
+    has_expenses = any(m["total"] > 0 for m in summary["expenses"])
+    has_incomes = any(m["total"] > 0 for m in summary["incomes"])
+
+    if not has_expenses and not has_incomes:
+        stats_text += "<i>No hay movimientos registrados este año.</i>"
     else:
-        for month_data in summary["months"]:
-            if month_data["total"] > 0:
-                month_name = months_es[month_data["month"]]
-                stats_text += f"📅 {month_name}: ${month_data['total']:,.2f} ({month_data['count']} gastos)\n"
-        
-        stats_text += f"\n💰 <b>Total anual: ${summary['total']:,.2f}</b>"
-    
+        if has_expenses:
+            stats_text += "<b>Gastos por mes:</b>\n"
+            for m in summary["expenses"]:
+                if m["total"] > 0:
+                    month_name = months_es[m["month"]]
+                    stats_text += f"📅 {month_name}: ${m['total']:,.2f} ({m['count']} gastos)\n"
+            stats_text += f"\n💸 <b>Total gastos: ${summary['total_expenses']:,.2f}</b>\n"
+        if has_incomes:
+            stats_text += "\n<b>Ingresos por mes:</b>\n"
+            for m in summary["incomes"]:
+                if m["total"] > 0:
+                    month_name = months_es[m["month"]]
+                    stats_text += f"📅 {month_name}: ${m['total']:,.2f} ({m['count']} ingresos)\n"
+            stats_text += f"\n💵 <b>Total ingresos: ${summary['total_incomes']:,.2f}</b>\n"
+        # Balance
+        balance = summary["total_incomes"] - summary["total_expenses"]
+        stats_text += f"\n<b>Balance anual:</b> <b>${balance:,.2f}</b>"
+
     await update.message.reply_text(stats_text, parse_mode="HTML")
     await update.message.reply_text(
         "📋 <b>¿Qué más quieres hacer?</b>",
@@ -774,6 +803,18 @@ Solo escríbeme o dime lo que gastaste:
 
 
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        # Income category selection
+        elif data.startswith("income_cat_"):
+            # Extract category name
+            cat_name = data[len("income_cat_"):]
+            context.user_data["income_category"] = cat_name
+            await query.edit_message_text(
+                f"💵 <b>{cat_name}</b> seleccionado.\n\n" +
+                "Por favor, escribe el monto y una breve descripción del ingreso.\n\n"
+                "Ejemplo: <code>1500 Pago de sueldo</code>",
+                parse_mode="HTML",
+            )
+            context.user_data["awaiting_income_input"] = True
     """Handle inline keyboard callbacks."""
     query = update.callback_query
     await query.answer()
@@ -823,86 +864,142 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text("❌ Gasto cancelado.")
         # Show menu after cancellation
         await query.message.reply_text(
-            "📋 <b>¿Qué quieres hacer?</b>",
-            parse_mode="HTML",
-            reply_markup=get_main_menu_keyboard()
-        )
-    
-    # Payment method selection (confirms and saves payment method)
-    elif data.startswith("pay_"):
-        parts = data.split("_")
-        payment_method = parts[1]  # efectivo, tarjeta, transferencia
-        expense_id = int(parts[2])
-        
-        payment_icons = {
-            "efectivo": "💵",
-            "tarjeta": "💳",
-            "transferencia": "🏦"
-        }
-        payment_display = {
-            "efectivo": "Efectivo",
-            "tarjeta": "Tarjeta",
-            "transferencia": "Transferencia"
-        }
-        
-        async with get_session() as session:
-            expense_repo = ExpenseRepository(session)
-            pending_repo = PendingConfirmationRepository(session)
-            
-            expense = await expense_repo.confirm_with_payment(expense_id, payment_method)
-            await pending_repo.delete_by_expense_id(expense_id)
-        
-        if expense:
-            icon = payment_icons.get(payment_method, "💰")
-            method_name = payment_display.get(payment_method, payment_method)
-            await query.edit_message_text(
-                f"✅ <b>Gasto registrado</b>\n\n"
-                f"💵 ${expense.amount:,.2f} - {expense.description}\n"
-                f"{icon} Pagado con: <b>{method_name}</b>",
-                parse_mode="HTML"
-            )
-            # Show menu after confirmation
-            await query.message.reply_text(
-                "📋 <b>¿Qué más quieres hacer?</b>",
-                parse_mode="HTML",
-                reply_markup=get_main_menu_keyboard()
-            )
-        else:
-            await query.edit_message_text("❌ No se encontró el gasto.")
-    
-    # Edit category
-    elif data.startswith("edit_cat_"):
-        expense_id = int(data.split("_")[2])
-        
-        async with get_session() as session:
-            category_repo = CategoryRepository(session)
-            categories = await category_repo.get_all()
-        
-        keyboard = []
-        for cat in categories:
-            keyboard.append([
-                InlineKeyboardButton(
-                    f"{cat.emoji} {cat.name}",
-                    callback_data=f"setcat_{expense_id}_{cat.id}"
+            # Check if awaiting income input
+            if context.user_data.get("awaiting_income_input"):
+                cat_name = context.user_data.get("income_category")
+                if not cat_name:
+                    await update.message.reply_text("❌ Error: No se seleccionó categoría de ingreso. Usa el menú para intentarlo de nuevo.")
+                    context.user_data["awaiting_income_input"] = False
+                    return
+
+                # Parse input: expect "monto descripción"
+                try:
+                    parts = text.strip().split(" ", 1)
+                    amount = float(parts[0].replace(",", "."))
+                    description = parts[1] if len(parts) > 1 else "Ingreso"
+                except Exception:
+                    await update.message.reply_text("❌ Por favor, escribe el monto y una breve descripción.\nEjemplo: <code>1500 Pago de sueldo</code>", parse_mode="HTML")
+                    return
+
+                # Save as income
+                async with get_session() as session:
+                    user_repo = UserRepository(session)
+                    category_repo = CategoryRepository(session)
+                    expense_repo = ExpenseRepository(session)
+                    db_user = await user_repo.get_by_telegram_id(user.id)
+
+                    # Find or create category for income
+                    cat_emoji = cat_name.split(" ")[0]
+                    cat_label = cat_name.split(" ", 1)[1] if " " in cat_name else cat_name
+                    category = await category_repo.get_by_name(cat_label)
+                    if not category:
+                        category = await category_repo.create(cat_label, cat_emoji, keywords=config.INCOME_CATEGORIES.get(cat_name, []))
+                    category_id = category.id
+
+                    income = await expense_repo.create(
+                        user_id=db_user.id,
+                        amount=amount,
+                        description=description,
+                        category_id=category_id,
+                        currency=db_user.default_currency,
+                        merchant=None,
+                        source="telegram_text_income",
+                        expense_date=datetime.now(),
+                        original_message=text,
+                        is_confirmed=True,
+                        # Mark as income
+                        is_income=True
+                    )
+
+                await update.message.reply_text(
+                    f"✅ <b>Ingreso registrado:</b>\n\n💵 Monto: <b>${amount:,.2f} {db_user.default_currency}</b>\n📂 Categoría: {cat_emoji} {cat_label}\n📋 Descripción: {description}",
+                    parse_mode="HTML",
+                    reply_markup=get_main_menu_keyboard()
                 )
-            ])
-        keyboard.append([
-            InlineKeyboardButton("🔙 Volver", callback_data=f"back_{expense_id}")
-        ])
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(
-            "📂 Selecciona la categoría correcta:",
-            reply_markup=reply_markup
-        )
-    
-    # Set category
-    elif data.startswith("setcat_"):
-        parts = data.split("_")
-        expense_id = int(parts[1])
-        category_id = int(parts[2])
-        
-        async with get_session() as session:
+                context.user_data["awaiting_income_input"] = False
+                context.user_data["income_category"] = None
+                return
+
+            # Parse the expense (default flow)
+            await update.message.reply_chat_action("typing")
+            parsed = await expense_parser.parse(text)
+
+            # Check if clarification is needed
+            if parsed.needs_clarification:
+                await update.message.reply_text(
+                    f"🤔 {parsed.clarification_question or 'No pude entender el gasto. ¿Podrías reformularlo?'}"
+                )
+                return
+
+            if parsed.amount <= 0:
+                await update.message.reply_text(
+                    "❓ No pude detectar el monto del gasto. Por favor, incluye la cantidad.\n"
+                    "Ejemplo: 'Gasté 150 en uber'"
+                )
+                return
+
+            # Save to database (pending confirmation)
+            async with get_session() as session:
+                category_repo = CategoryRepository(session)
+                expense_repo = ExpenseRepository(session)
+                pending_repo = PendingConfirmationRepository(session)
+
+                # Get user (already exists at this point)
+                user_repo = UserRepository(session)
+                db_user = await user_repo.get_by_telegram_id(user.id)
+
+                # Find category
+                category = await category_repo.get_by_name(parsed.category)
+                category_id = category.id if category else None
+                category_display = f"{category.emoji} {category.name}" if category else f"💰 {parsed.category}"
+
+                # Create expense (pending)
+                expense = await expense_repo.create(
+                    user_id=db_user.id,
+                    amount=parsed.amount,
+                    description=parsed.description,
+                    category_id=category_id,
+                    currency=parsed.currency,
+                    merchant=parsed.merchant,
+                    source="telegram_text",
+                    expense_date=parsed.date,
+                    original_message=text,
+                    is_confirmed=False
+                )
+
+                # Create confirmation message
+                date_str = parsed.date.strftime("%d/%m/%Y") if parsed.date else "Hoy"
+
+                confirmation_text = f"""📝 <b>Nuevo gasto detectado:</b>\n\n💵 Monto: <b>${parsed.amount:,.2f} {parsed.currency}</b>\n📂 Categoría: {category_display}\n📋 Descripción: {parsed.description}\n🏪 Comercio: {parsed.merchant or "No especificado"}\n📅 Fecha: {date_str}\n\n💳 <b>¿Cómo pagaste?</b>"""
+
+                # Inline keyboard for payment method selection
+                keyboard = [
+                    [
+                        InlineKeyboardButton("💵 Efectivo", callback_data=f"pay_efectivo_{expense.id}"),
+                        InlineKeyboardButton("💳 Tarjeta", callback_data=f"pay_tarjeta_{expense.id}"),
+                    ],
+                    [
+                        InlineKeyboardButton("🏦 Transferencia", callback_data=f"pay_transferencia_{expense.id}"),
+                    ],
+                    [
+                        InlineKeyboardButton("✏️ Editar categoría", callback_data=f"edit_cat_{expense.id}"),
+                        InlineKeyboardButton("❌ Cancelar", callback_data=f"cancel_{expense.id}")
+                    ]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                sent_message = await update.message.reply_text(
+                    confirmation_text,
+                    parse_mode="HTML",
+                    reply_markup=reply_markup
+                )
+
+                # Save pending confirmation
+                await pending_repo.create(
+                    user_id=db_user.id,
+                    expense_id=expense.id,
+                    message_id=sent_message.message_id
+                )
             expense_repo = ExpenseRepository(session)
             category_repo = CategoryRepository(session)
             
@@ -1038,6 +1135,26 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     
     # Main menu
     elif data == "menu_principal":
+        await query.edit_message_text(
+            "📋 <b>¿Qué quieres hacer?</b>",
+            parse_mode="HTML",
+            reply_markup=get_main_menu_keyboard()
+        )
+
+    # Income registration menu
+    elif data == "menu_registrar_ingreso":
+        # Show income categories for selection
+        income_keyboard = []
+        for cat_name in config.INCOME_CATEGORIES.keys():
+            income_keyboard.append([
+                InlineKeyboardButton(cat_name, callback_data=f"income_cat_{cat_name}")
+            ])
+        income_keyboard.append([InlineKeyboardButton("⬅️ Volver", callback_data="menu_principal")])
+        await query.edit_message_text(
+            "💰 <b>Registrar ingreso</b>\n\nSelecciona el tipo de ingreso:",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(income_keyboard)
+        )
         await query.edit_message_text(
             "📋 <b>¿Qué quieres hacer?</b>",
             parse_mode="HTML",

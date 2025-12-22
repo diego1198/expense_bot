@@ -67,20 +67,27 @@ async def _run_migrations(conn) -> None:
     import sqlite3
     
     # Check if payment_method column exists in expenses table
+    # Add payment_method if missing
     try:
-        result = await conn.execute(
-            text("SELECT payment_method FROM expenses LIMIT 1")
-        )
+        await conn.execute(text("SELECT payment_method FROM expenses LIMIT 1"))
     except Exception:
-        # Column doesn't exist, add it
         logger.info("Adding payment_method column to expenses table...")
         try:
-            await conn.execute(
-                text("ALTER TABLE expenses ADD COLUMN payment_method VARCHAR(20)")
-            )
+            await conn.execute(text("ALTER TABLE expenses ADD COLUMN payment_method VARCHAR(20)"))
             logger.info("payment_method column added successfully.")
         except Exception as e:
             logger.warning(f"Could not add payment_method column: {e}")
+
+    # Add is_income if missing
+    try:
+        await conn.execute(text("SELECT is_income FROM expenses LIMIT 1"))
+    except Exception:
+        logger.info("Adding is_income column to expenses table...")
+        try:
+            await conn.execute(text("ALTER TABLE expenses ADD COLUMN is_income BOOLEAN DEFAULT 0"))
+            logger.info("is_income column added successfully.")
+        except Exception as e:
+            logger.warning(f"Could not add is_income column: {e}")
 
 
 async def close_db() -> None:

@@ -296,14 +296,15 @@ class ExpenseRepository:
         year: int, 
         month: int
     ) -> dict:
-        """Get monthly expense summary by category."""
+        """Get monthly summary by category, split by expenses and incomes."""
         start_date = datetime(year, month, 1)
         if month == 12:
             end_date = datetime(year + 1, 1, 1)
         else:
             end_date = datetime(year, month + 1, 1)
-        
-        result = await self.session.execute(
+
+        # Expenses
+        exp_result = await self.session.execute(
             select(
                 Category.name,
                 Category.emoji,
@@ -316,32 +317,65 @@ class ExpenseRepository:
                     Expense.user_id == user_id,
                     Expense.is_confirmed == True,
                     Expense.expense_date >= start_date,
-                    Expense.expense_date < end_date
+                    Expense.expense_date < end_date,
+                    Expense.is_income == False
                 )
             )
             .group_by(Category.id)
         )
-        
-        rows = result.all()
-        
+        exp_rows = exp_result.all()
+
+        # Incomes
+        inc_result = await self.session.execute(
+            select(
+                Category.name,
+                Category.emoji,
+                func.sum(Expense.amount).label("total"),
+                func.count(Expense.id).label("count")
+            )
+            .join(Category, Expense.category_id == Category.id, isouter=True)
+            .where(
+                and_(
+                    Expense.user_id == user_id,
+                    Expense.is_confirmed == True,
+                    Expense.expense_date >= start_date,
+                    Expense.expense_date < end_date,
+                    Expense.is_income == True
+                )
+            )
+            .group_by(Category.id)
+        )
+        inc_rows = inc_result.all()
+
         return {
             "year": year,
             "month": month,
-            "categories": [
+            "expenses": [
                 {
                     "name": row.name or "Sin categoría",
                     "emoji": row.emoji or "💰",
                     "total": float(row.total or 0),
                     "count": row.count
                 }
-                for row in rows
+                for row in exp_rows
             ],
-            "total": sum(float(row.total or 0) for row in rows)
+            "incomes": [
+                {
+                    "name": row.name or "Sin categoría",
+                    "emoji": row.emoji or "💰",
+                    "total": float(row.total or 0),
+                    "count": row.count
+                }
+                for row in inc_rows
+            ],
+            "total_expenses": sum(float(row.total or 0) for row in exp_rows),
+            "total_incomes": sum(float(row.total or 0) for row in inc_rows)
         }
     
     async def get_yearly_summary(self, user_id: int, year: int) -> dict:
-        """Get yearly expense summary by month."""
-        result = await self.session.execute(
+        """Get yearly summary by month, split by expenses and incomes."""
+        # Expenses
+        exp_result = await self.session.execute(
             select(
                 extract("month", Expense.expense_date).label("month"),
                 func.sum(Expense.amount).label("total"),
@@ -351,28 +385,58 @@ class ExpenseRepository:
                 and_(
                     Expense.user_id == user_id,
                     Expense.is_confirmed == True,
-                    extract("year", Expense.expense_date) == year
+                    extract("year", Expense.expense_date) == year,
+                    Expense.is_income == False
                 )
             )
             .group_by(extract("month", Expense.expense_date))
             .order_by(extract("month", Expense.expense_date))
         )
-        
-        rows = result.all()
-        
-        months_data = {int(row.month): {"total": float(row.total), "count": row.count} for row in rows}
-        
+        exp_rows = exp_result.all()
+
+        # Incomes
+        inc_result = await self.session.execute(
+            select(
+                extract("month", Expense.expense_date).label("month"),
+                func.sum(Expense.amount).label("total"),
+                func.count(Expense.id).label("count")
+            )
+            .where(
+                and_(
+                    Expense.user_id == user_id,
+                    Expense.is_confirmed == True,
+                    extract("year", Expense.expense_date) == year,
+                    Expense.is_income == True
+                )
+            )
+            .group_by(extract("month", Expense.expense_date))
+            .order_by(extract("month", Expense.expense_date))
+        )
+        inc_rows = inc_result.all()
+
+        exp_months = {int(row.month): {"total": float(row.total), "count": row.count} for row in exp_rows}
+        inc_months = {int(row.month): {"total": float(row.total), "count": row.count} for row in inc_rows}
+
         return {
             "year": year,
-            "months": [
+            "expenses": [
                 {
                     "month": m,
-                    "total": months_data.get(m, {}).get("total", 0),
-                    "count": months_data.get(m, {}).get("count", 0)
+                    "total": exp_months.get(m, {}).get("total", 0),
+                    "count": exp_months.get(m, {}).get("count", 0)
                 }
                 for m in range(1, 13)
             ],
-            "total": sum(float(row.total or 0) for row in rows)
+            "incomes": [
+                {
+                    "month": m,
+                    "total": inc_months.get(m, {}).get("total", 0),
+                    "count": inc_months.get(m, {}).get("count", 0)
+                }
+                for m in range(1, 13)
+            ],
+            "total_expenses": sum(float(row.total or 0) for row in exp_rows),
+            "total_incomes": sum(float(row.total or 0) for row in inc_rows)
         }
 
 
