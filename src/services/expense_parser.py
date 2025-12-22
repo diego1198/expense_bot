@@ -58,10 +58,12 @@ class ExpenseParser:
     def __init__(self):
         self.client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
         self.model = config.GPT_MODEL
-        
         # Build category list for prompt
         self.categories = list(config.CATEGORIES.keys())
         self.category_names = [cat.split(" ", 1)[1] if " " in cat else cat for cat in self.categories]
+        # Income categories
+        self.income_categories = list(config.INCOME_CATEGORIES.keys())
+        self.income_keywords = [kw for kws in config.INCOME_CATEGORIES.values() for kw in kws]
     
     async def parse(self, text: str, user_timezone: str = "America/Mexico_City") -> ParsedExpense:
         """
@@ -83,6 +85,40 @@ class ExpenseParser:
         return await self._gpt_parse(text, user_timezone)
     
     def _try_simple_parse(self, text: str) -> Optional[ParsedExpense]:
+        # Detect income pattern first
+        text_lower = text.lower().strip()
+        income_patterns = [
+            r"(?:recib[ií]|ingres[ée]|me pagaron|me depositaron|cobr[ée]|gan[ée]|abono|me transfirieron)\s+\$?\s*(\d+(?:[.,]\d{1,2})?)\s*(?:pesos|mxn|usd)?\s*(?:de|por)?\s*(.+)",
+            r"^\$?\s*(\d+(?:[.,]\d{1,2})?)\s*(?:pesos|mxn|usd)?\s+(?:de|por)?\s*(ingreso|sueldo|salario|venta|préstamo|prestamo|inversión|extra|bono|premio|regalo|abono|dividendo|rendimiento|interés|credito|crédito|deuda)\b(.+)?",
+            r"^(ingreso|sueldo|salario|venta|préstamo|prestamo|inversión|extra|bono|premio|regalo|abono|dividendo|rendimiento|interés|credito|crédito|deuda)\s+\$?\s*(\d+(?:[.,]\d{1,2})?)"
+        ]
+        for pattern in income_patterns:
+            match = re.match(pattern, text_lower, re.IGNORECASE)
+            if match:
+                # Try to extract amount and description
+                if pattern.startswith("^(ingreso"):
+                    description = match.group(1).strip()
+                    amount_str = match.group(2).replace(",", ".")
+                else:
+                    amount_str = match.group(1).replace(",", ".")
+                    description = match.group(2).strip() if match.lastindex >= 2 else "Ingreso"
+                try:
+                    amount = float(amount_str)
+                except ValueError:
+                    continue
+                # Match income category
+                category = self._match_income_category(description)
+                return ParsedExpense(
+                    amount=amount,
+                    currency=config.DEFAULT_CURRENCY,
+                    description=description.capitalize(),
+                    category=category,
+                    merchant=None,
+                    date=get_local_now(),
+                    confidence=0.8,
+                    needs_clarification=False
+                )
+        # ...existing code...
         """
         Try to parse expense with simple regex patterns.
         Returns None if pattern is too complex for regex.
@@ -139,6 +175,19 @@ class ExpenseParser:
         return None
     
     def _match_category(self, text: str) -> str:
+        # Check for income keywords first
+        for cat_full, keywords in config.INCOME_CATEGORIES.items():
+            cat_name = cat_full.split(" ", 1)[1] if " " in cat_full else cat_full
+            for keyword in keywords:
+                if keyword.lower() in text.lower():
+                    return cat_name
+            def _match_income_category(self, text: str) -> str:
+                for cat_full, keywords in config.INCOME_CATEGORIES.items():
+                    cat_name = cat_full.split(" ", 1)[1] if " " in cat_full else cat_full
+                    for keyword in keywords:
+                        if keyword.lower() in text.lower():
+                            return cat_name
+                return "Otros ingresos"
         """Match category based on keywords."""
         text_lower = text.lower()
         

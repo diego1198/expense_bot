@@ -51,9 +51,6 @@ def get_main_menu_keyboard():
             InlineKeyboardButton("📂 Tipos de gasto", callback_data="menu_tipos"),
         ],
         [
-            InlineKeyboardButton("➕ Registrar ingreso", callback_data="menu_registrar_ingreso"),
-        ],
-        [
             InlineKeyboardButton("🗑️ Quitar un gasto", callback_data="menu_quitar"),
             InlineKeyboardButton("🧹 Borrar todo", callback_data="menu_borrar_todo"),
         ],
@@ -870,42 +867,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             parse_mode="HTML",
             reply_markup=get_main_menu_keyboard()
         )
-        expense_repo = ExpenseRepository(session)
-        category_repo = CategoryRepository(session)
         
-        expense = await expense_repo.get_by_id(expense_id)
-        category = await category_repo.get_by_id(category_id)
-        
-        if expense and category:
-                expense.category_id = category_id
-                await session.flush()
-                
-                category_display = f"{category.emoji} {category.name}"
-                date_str = expense.expense_date.strftime("%d/%m/%Y")
-                
-                confirmation_text = f"""📝 <b>Gasto actualizado:</b>
-                💵 Monto: <b>${expense.amount:,.2f} {expense.currency}</b>
-                📂 Categoría: {category_display}
-                📋 Descripción: {expense.description}
-                📅 Fecha: {date_str}
-                ¿Es correcto?"""
-                keyboard = [
-                    [
-                        InlineKeyboardButton("✅ Confirmar", callback_data=f"confirm_{expense.id}"),
-                        InlineKeyboardButton("❌ Cancelar", callback_data=f"cancel_{expense.id}")
-                    ],
-                    [
-                        InlineKeyboardButton("✏️ Editar categoría", callback_data=f"edit_cat_{expense.id}")
-                    ]
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                
-                await query.edit_message_text(
-                    confirmation_text,
-                    parse_mode="HTML",
-                    reply_markup=reply_markup
-                )
-    
     # Clear all expenses confirmation
     elif data == "clear_confirm":
         async with get_session() as session:
