@@ -595,17 +595,17 @@ O envíame un <b>audio</b> contándome 🎤
         category_repo = CategoryRepository(session)
         expense_repo = ExpenseRepository(session)
         pending_repo = PendingConfirmationRepository(session)
-        
         # Get user (already exists at this point)
         user_repo = UserRepository(session)
         db_user = await user_repo.get_by_telegram_id(user.id)
-        
-        # Find category
         category = await category_repo.get_by_name(parsed.category)
         category_id = category.id if category else None
         category_display = f"{category.emoji} {category.name}" if category else f"💰 {parsed.category}"
-        
-        # Create expense (pending)
+
+        # Detect if it's an ingreso (income)
+        ingreso_categorias = [cat.split(" ", 1)[1] if " " in cat else cat for cat in config.INCOME_CATEGORIES.keys()]
+        es_ingreso = parsed.category in ingreso_categorias or parsed.category.lower() == "otros ingresos"
+
         expense = await expense_repo.create(
             user_id=db_user.id,
             amount=parsed.amount,
@@ -616,21 +616,19 @@ O envíame un <b>audio</b> contándome 🎤
             source="telegram_text",
             expense_date=parsed.date,
             original_message=text,
-            is_confirmed=False
+            is_confirmed=False,
+            is_income=es_ingreso
         )
-        
+
+        date_str = parsed.date.strftime("%d/%m/%Y") if parsed.date else "Hoy"
+
+        if es_ingreso:
+            confirmation_text = f"""💰 <b>Nuevo ingreso detectado:</b>\n\n💵 Monto: <b>${parsed.amount:,.2f} {parsed.currency}</b>\n📂 Categoría: {category_display}\n📋 Descripción: {parsed.description}\n📅 Fecha: {date_str}\n\n¿Es correcto?"""
+        else:
+            confirmation_text = f"""📝 <b>Nuevo gasto detectado:</b>\n\n💵 Monto: <b>${parsed.amount:,.2f} {parsed.currency}</b>\n📂 Categoría: {category_display}\n📋 Descripción: {parsed.description}\n🏪 Comercio: {parsed.merchant or 'No especificado'}\n📅 Fecha: {date_str}\n\n💳 <b>¿Cómo pagaste?</b>"""
+
         # Create confirmation message
         date_str = parsed.date.strftime("%d/%m/%Y") if parsed.date else "Hoy"
-        
-        confirmation_text = f"""📝 <b>Nuevo gasto detectado:</b>
-
-💵 Monto: <b>${parsed.amount:,.2f} {parsed.currency}</b>
-📂 Categoría: {category_display}
-📋 Descripción: {parsed.description}
-🏪 Comercio: {parsed.merchant or "No especificado"}
-📅 Fecha: {date_str}
-
-💳 <b>¿Cómo pagaste?</b>"""
         
         # Inline keyboard for payment method selection
         keyboard = [
@@ -1407,7 +1405,7 @@ async def _check_emails_for_user(context: ContextTypes.DEFAULT_TYPE, chat_id: in
                     is_confirmed=False
                 )
                 
-                date_str = parsed.date.strftime("%d/%m/%Y")
+                date_str = parsed.date.strftime("%d/%m/%Y") if parsed.date else "Hoy"
                 
                 confirmation_text = f"""📧 <b>Factura detectada en email:</b>
 
@@ -1718,7 +1716,7 @@ async def auto_check_emails_job(context: ContextTypes.DEFAULT_TYPE) -> None:
                             is_confirmed=False
                         )
                         
-                        date_str = parsed.date.strftime("%d/%m/%Y")
+                        date_str = parsed.date.strftime("%d/%m/%Y") if parsed.date else "Hoy"
                         
                         confirmation_text = f"""📧 <b>Nueva factura detectada:</b>
 
