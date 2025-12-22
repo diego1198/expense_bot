@@ -803,8 +803,17 @@ Solo escríbeme o dime lo que gastaste:
 
 
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle inline keyboard callbacks."""
+    query = update.callback_query
+    await query.answer()
+
+    if not is_user_allowed(query.from_user.id):
+        return
+
+    data = query.data
+
     # Income category selection
-    elif data.startswith("income_cat_"):
+    if data.startswith("income_cat_"):
         # Extract category name
         cat_name = data[len("income_cat_"):]
         context.user_data["income_category"] = cat_name
@@ -815,15 +824,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             parse_mode="HTML",
         )
         context.user_data["awaiting_income_input"] = True
-    """Handle inline keyboard callbacks."""
-    query = update.callback_query
-    await query.answer()
-    
-    if not is_user_allowed(query.from_user.id):
         return
-    
-    data = query.data
-    
+
     # Confirm expense
     if data.startswith("confirm_"):
         expense_id = int(data.split("_")[1])
