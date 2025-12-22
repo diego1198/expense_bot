@@ -1826,7 +1826,7 @@ async def set_email_interval_command(update: Update, context: ContextTypes.DEFAU
             if mins:
                 display = f"{hours}h {mins}min"
             else:
-                display = f"{hours} hora{'s' if hours > 1 else ''}"
+                display = f"{hours} hora{'s' if hours > 60 else ''}"
         else:
             display = f"{minutes} minutos"
         
