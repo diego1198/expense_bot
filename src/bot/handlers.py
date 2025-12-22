@@ -803,18 +803,18 @@ Solo escríbeme o dime lo que gastaste:
 
 
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        # Income category selection
-        elif data.startswith("income_cat_"):
-            # Extract category name
-            cat_name = data[len("income_cat_"):]
-            context.user_data["income_category"] = cat_name
-            await query.edit_message_text(
-                f"💵 <b>{cat_name}</b> seleccionado.\n\n" +
-                "Por favor, escribe el monto y una breve descripción del ingreso.\n\n"
-                "Ejemplo: <code>1500 Pago de sueldo</code>",
-                parse_mode="HTML",
-            )
-            context.user_data["awaiting_income_input"] = True
+    # Income category selection
+    elif data.startswith("income_cat_"):
+        # Extract category name
+        cat_name = data[len("income_cat_"):]
+        context.user_data["income_category"] = cat_name
+        await query.edit_message_text(
+            f"💵 <b>{cat_name}</b> seleccionado.\n\n" +
+            "Por favor, escribe el monto y una breve descripción del ingreso.\n\n"
+            "Ejemplo: <code>1500 Pago de sueldo</code>",
+            parse_mode="HTML",
+        )
+        context.user_data["awaiting_income_input"] = True
     """Handle inline keyboard callbacks."""
     query = update.callback_query
     await query.answer()
